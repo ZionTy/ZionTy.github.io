@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>多人视频通话</title>
+</head>
+<body>
+  <h1>多人视频通话</h1>
+  <video id="video" autoplay="true"></video>
+  <script>
+    //获取本地视频流
+  var localvideo = document.getElementById('video');
+  var localvideostream;
+  function TogetUserMedia(constrains,success,error){
+    if(navigator.mediaDevices.getUserMedia){//标准API
+        navigator.mediaDevices.getUserMedia(constrains).then(success).catch(error);
+      
+    }else if(navigator.webkitGetUserMedia){//webkit内核浏览器
+        navigator.webkitGetUserMedia(constrains).then(success).catch(error);
+    }else if(navigator.mozGetMedia){//firefox浏览器
+        navigator.mozGetMedia(constrains).then(success).catch(error);
+    }else if(navigator.getUserMedia){//旧版API
+        navigator.getUserMedia(constrains).then(success).catch(error);
+    }
+  }
+       //成功的回调函数
+function success(stream){
+    video.srcObject = stream;
+}
+//异常的回调函数
+function error(error){
+    console.log("访问用户媒体设备失败：",error.name,error.message);
+}
+try{
+    //调用用户媒体设备，访问摄像头
+    TogetUserMedia({
+        video:{width:480,height:320}
+    },success,error);
+} catch(e) {
+    alert("你的浏览器不支持访问用户媒体设备");
+}
+  </script>
+</body>
+</html>
