@@ -1,43 +1,110 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <title>多人视频通话</title>
-</head>
-<body>
-  <h1>多人视频通话</h1>
-  <video id="video" autoplay="true"></video>
-  <script>
+    <head>
+        <meta charset="utf-8">
+        <script src="socket.io.js"></script>
+    </head>
+
+    <body>
+        <h1>多人视频通话</h1>
+        <p>localvideo =><video id="localvideo" autoplay>
+        </video></p>
+        <p>remotevideo =><video id="remotevideo" autoplay></video></p>
+    
+    <script>
+
+    var signal_server = prompt('请输入信令服务器ip地址：');
+
     //获取本地视频流
-  var localvideo = document.getElementById('video');
-  var localvideostream;
-  function TogetUserMedia(constrains,success,error){
-    if(navigator.mediaDevices.getUserMedia){//标准API
-        navigator.mediaDevices.getUserMedia(constrains).then(success).catch(error);
-      
-    }else if(navigator.webkitGetUserMedia){//webkit内核浏览器
-        navigator.webkitGetUserMedia(constrains).then(success).catch(error);
-    }else if(navigator.mozGetMedia){//firefox浏览器
-        navigator.mozGetMedia(constrains).then(success).catch(error);
-    }else if(navigator.getUserMedia){//旧版API
-        navigator.getUserMedia(constrains).then(success).catch(error);
+    var localvideo = document.getElementById('localvideo');
+    var remotevideo = document.getElementById('remotevideo');
+    //兼容浏览器RTCPeerConnection
+    var RTCPeerConnection =  window.RTCPeerConnection || window.mozRTCPeerConnection || window.webkitRTCPeerConnection;
+    //兼容浏览器RTCSessionDescription
+    var RTCSessionDescription =  window.RTCSessionDescription || window.mozRTCSessionDescription || window.webkitRTCSessionDescription;
+    //STUN服务器
+    const config = {
+    iceServers: [{
+    urls: 'stun:stun.l.google.com:19302'}]
     }
-  }
-       //成功的回调函数
-function success(stream){
-    video.srcObject = stream;
-}
-//异常的回调函数
-function error(error){
-    console.log("访问用户媒体设备失败：",error.name,error.message);
-}
-try{
-    //调用用户媒体设备，访问摄像头
-    TogetUserMedia({
-        video:{width:480,height:320}
-    },success,error);
-} catch(e) {
-    alert("你的浏览器不支持访问用户媒体设备");
-}
-  </script>
-</body>
+    //SDP options
+    let options = {
+      offerToReceiveAudio: 1,
+      offerToReceiveVideo: 1,
+      iceRestart: false
+    };
+    var localstream = new MediaStream();
+    var user_id = 1;
+    var pc = new RTCPeerConnection(config);
+
+    var socket = io('ws://'+signal_server+':10001');//server <-- socket.io
+
+    console.log('connecting...')
+
+    socket.on('arrive',data=>console.log(data))
+
+    socket.on('token',data =>{
+        user_id = data;
+        navigator.mediaDevices.getUserMedia({video:true,audio:false}).then(stream =>{
+
+            console.log('get localstream');
+            localvideo.srcObject = stream;
+            pc.addStream(stream);
+            console.log('id :'+user_id);
+            console.log('create RTC');
+            pc.onicecandidate = evt =>{
+                if(evt.candidate){
+                    console.log('get my ice');
+                    socket.emit('candidate',JSON.stringify(evt.candidate));
+                }
+            }
+        
+            socket.on('candidate', data =>{
+                var ice = JSON.parse(data);
+                pc.addIceCandidate(ice).then(
+                    console.log('ice set')
+                ).catch(geterror)
+            })
+
+            if(user_id === 2){
+                pc.createOffer(options).then((offer) =>{
+                    socket.emit('offer',JSON.stringify(offer));
+                    return pc.setLocalDescription(new RTCSessionDescription(offer));
+                }).catch(geterror)
+            }
+
+            pc.onaddstream = evt=>{
+                    console.log('stream arrived.:'+evt.stream.id);
+                    remotevideo.srcObject = evt.stream;}       
+            
+        }).catch(error =>geterror(error))
+    })
+
+            socket.on('offer',rec_data =>{
+                var rec_offer = JSON.parse(rec_data)
+                pc.setRemoteDescription(new RTCSessionDescription(rec_offer))
+                .then(()=>{
+                    pc.createAnswer()
+                        .then((answer) =>{
+                            pc.setLocalDescription(new RTCSessionDescription(answer));
+                            console.log('answer:offer set.\n answer:answer set.');
+                            socket.emit('answer',JSON.stringify(answer));
+                })
+                })    
+            })
+
+            socket.on('answer', rec_answer =>{
+                console.log('offer: answer received.');
+             var answer = JSON.parse(rec_answer);
+            pc.setRemoteDescription(new RTCSessionDescription(answer)).then(console.log('offer:answer set.'));
+            })
+
+    function geterror(error){
+        console.log('error: '+error)
+    }
+    
+    </script>
+    
+    </body>
+
 </html>
